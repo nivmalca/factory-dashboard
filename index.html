@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>דשבורד רצפת ייצור - ניהול מחלקות</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .machine-card {
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+        }
+        .machine-card:hover {
+            transform: scale(1.02);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+        .status-working { background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%); }
+        .status-idle { background: linear-gradient(135deg, #facc15 0%, #eab308 100%); }
+        .status-error { background: linear-gradient(135deg, #f87171 0%, #ef4444 100%); }
+        .pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .7; }
+        }
+        .delete-btn {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .machine-card:hover .delete-btn {
+            opacity: 1;
+        }
+        .delete-btn:hover {
+            background: rgba(239, 68, 68, 0.9);
+        }
+        .tab-button {
+            transition: all 0.3s;
+        }
+        .tab-button.active {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="container mx-auto p-4 md:p-6 max-w-7xl">
+        <!-- Header -->
+        <div class="bg-white rounded-2xl shadow-lg p-4 md:p-6 mb-6">
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <h1 class="text-2xl md:text-3xl font-bold text-gray-800 mb-2">🏭 דשבורד רצפת ייצור</h1>
+                    <p class="text-gray-600 text-sm md:text-base">ניהול מחלקות ומכונות</p>
+                </div>
+                <button onclick="showAddMachineModal()" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 md:py-3 md:px-6 rounded-lg transition text-sm md:text-base">
+                    ➕ מכונה חדשה
+                </button>
+            </div>
+            
+            <!-- Status Legend -->
+            <div class="mt-4 flex flex-wrap gap-3 md:gap-4 text-xs md:text-sm">
+                <div class="flex items-center gap-2">
+                    <div class="w-4 h-4 bg-green-500 rounded-full"></div>
+                    <span>עובד</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-4 h-4 bg-yellow-500 rounded-full"></div>
+                    <span>כיוון/המתנה</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-4 h-4 bg-red-500 rounded-full pulse"></div>
+                    <span>תקלה</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Department Tabs -->
+        <div class="bg-white rounded-2xl shadow-lg p-4 md:p-6 mb-6">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3" id="departmentTabs">
+                <!-- Tabs will be rendered here -->
+            </div>
+            <div class="mt-4 text-center text-sm text-gray-500" id="machineCount"></div>
+        </div>
+
+        <!-- Machines Grid -->
+        <div id="machinesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-6">
+            <!-- Machines will be rendered here -->
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="hidden bg-white rounded-2xl shadow-lg p-12 text-center">
+            <div class="text-6xl mb-4">🏭</div>
+            <h3 class="text-xl font-bold text-gray-700 mb-2">אין מכונות במחלקה זו</h3>
+            <p class="text-gray-500 mb-6">לחץ על "➕ מכונה חדשה" כדי להוסיף</p>
+        </div>
+
+        <!-- Edit Machine Modal -->
+        <div id="editModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div class="bg-white rounded-2xl shadow-2xl p-6 md:p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <h2 class="text-xl md:text-2xl font-bold mb-6" id="modalTitle">עדכון מכונה</h2>
+                
+                <div class="space-y-4 md:space-y-6">
+                    <!-- Machine Name (only for new machines) -->
+                    <div id="machineNameDiv" class="hidden">
+                        <label class="block text-sm font-semibold mb-2">שם המכונה *</label>
+                        <input type="text" id="machineNameInput" placeholder="לדוגמה: מחרטה 5" class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none">
+                    </div>
+
+                    <!-- Department (only for new machines) -->
+                    <div id="departmentDiv" class="hidden">
+                        <label class="block text-sm font-semibold mb-2">מחלקה *</label>
+                        <select id="departmentSelect" class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none">
+                            <option value="cnc">מחלקת CNC</option>
+                            <option value="small_auto">מחלקת אוטומטים קטנים</option>
+                            <option value="large_auto">מחלקת אוטומטים גדולים</option>
+                            <option value="sub_operations">מחלקת פעולות משנה</option>
+                        </select>
+                    </div>
+
+                    <!-- Status -->
+                    <div>
+                        <label class="block text-sm font-semibold mb-2">סטטוס</label>
+                        <div class="grid grid-cols-3 gap-2 md:gap-3">
+                            <button onclick="selectStatus('working')" id="btn-working" class="py-2 md:py-3 rounded-lg font-medium transition text-sm md:text-base">
+                                ✅ עבודה
+                            </button>
+                            <button onclick="selectStatus('idle')" id="btn-idle" class="py-2 md:py-3 rounded-lg font-medium transition text-sm md:text-base">
+                                ⏸️ המתנה
+                            </button>
+                            <button onclick="selectStatus('error')" id="btn-error" class="py-2 md:py-3 rounded-lg font-medium transition text-sm md:text-base">
+                                ❌ תקלה
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Operator -->
+                    <div>
+                        <label class="block text-sm font-semibold mb-2">מפעיל</label>
+                        <input type="text" id="operatorInput" placeholder="שם המפעיל" class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none">
+                    </div>
+
+                    <!-- Project -->
+                    <div>
+                        <label class="block text-sm font-semibold mb-2">פרויקט</label>
+                        <input type="text" id="projectInput" placeholder="שם הפרויקט" class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none">
+                    </div>
+
+                    <!-- Time -->
+                    <div class="grid grid-cols-2 gap-3 md:gap-4">
+                        <div>
+                            <label class="block text-sm font-semibold mb-2">שעת התחלה</label>
+                            <input type="time" id="startTimeInput" class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-2">שעת סיום</label>
+                            <input type="time" id="endTimeInput" class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none">
+                        </div>
+                    </div>
+
+                    <!-- Units Counter -->
+                    <div>
+                        <label class="block text-sm font-semibold mb-2">מספר יחידות שיוצרו</label>
+                        <input type="number" id="unitsInput" min="0" placeholder="0" class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none">
+                    </div>
+
+                    <!-- Quality Control -->
+                    <div>
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" id="qcInput" class="w-5 h-5 text-blue-600 rounded">
+                            <span class="text-sm font-semibold">✓ עבר ביקורת איכות לאחרונה</span>
+                        </label>
+                    </div>
+
+                    <!-- Buttons -->
+                    <div class="flex gap-3 pt-4">
+                        <button onclick="saveChanges()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 md:py-4 rounded-lg transition text-sm md:text-base">
+                            💾 שמור שינויים
+                        </button>
+                        <button onclick="closeModal()" class="px-4 md:px-6 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 md:py-4 rounded-lg transition text-sm md:text-base">
+                            ביטול
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Google Sheets Connection -->
+        <div class="bg-blue-50 border-2 border-blue-200 rounded-2xl p-4 md:p-6">
+            <h3 class="text-base md:text-lg font-bold text-blue-900 mb-3">🔗 חיבור ל-Google Sheets</h3>
+            <div class="space-y-2 text-xs md:text-sm text-blue-800">
+                <p><strong>שלב 1:</strong> צור Google Sheet חדש</p>
+                <p><strong>שלב 2:</strong> הוסף את הכותרות: <code class="bg-white px-2 py-1 rounded text-xs">מחלקה | מכונה | סטטוס | מפעיל | פרויקט | התחלה | סיום | יחידות | ביקורת_איכות | עדכון_אחרון</code></p>
+                <p><strong>שלב 3:</strong> העתק את ה-Sheet ID מה-URL והדבק למטה</p>
+                <div class="mt-3">
+                    <input type="text" id="sheetIdInput" placeholder="הדבק כאן את ה-Sheet ID" class="w-full px-4 py-2 border-2 border-blue-300 rounded-lg text-sm">
+                    <div class="flex gap-2 mt-2">
+                        <button onclick="connectSheet()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 md:px-6 rounded-lg text-sm md:text-base">
+                            התחבר לגיליון
+                        </button>
+                        <button onclick="disconnectSheet()" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 md:px-6 rounded-lg text-sm md:text-base" id="disconnectBtn" style="display:none;">
+                            ניתוק
+                        </button>
+                    </div>
+                    <div id="connectionStatus" class="mt-2 text-xs md:text-sm"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Admin password
+        const ADMIN_PASSWORD = 'DITRON123';
+
+        // Check admin access
+        function checkAdminAccess(action) {
+            const password = prompt(`🔒 נדרשת סיסמת מנהל כדי ${action}`);
+            if (password === ADMIN_PASSWORD) {
+                return true;
+            } else if (password !== null) {
+                alert('❌ סיסמה שגויה');
+            }
+            return false;
+        }
+
+        // Department definitions
+        const departments = {
+            cnc: { name: 'מחלקת CNC', icon: '⚙️' },
+            small_auto: { name: 'מחלקת אוטומטים קטנים', icon: '🔧' },
+            large_auto: { name: 'מחלקת אוטומטים גדולים', icon: '🏗️' },
+            sub_operations: { name: 'מחלקת פעולות משנה', icon: '🔨' }
+        };
+
+        // Initial machine data with departments
+        const defaultMachines = [
+            { 
+                id: 'M1', 
+                department: 'cnc',
+                name: 'מחרטה CNC 1', 
+                status: 'working', 
+                operator: 'משה', 
+                project: 'אלפא',
+                startTime: '08:00',
+                endTime: '16:00',
+                units: 145,
+                qualityCheck: true
+            },
+            { 
+                id: 'M2', 
+                department: 'cnc',
+                name: 'כרסומת CNC 2', 
+                status: 'idle', 
+                operator: '-', 
+                project: '-',
+                startTime: '',
+                endTime: '',
+                units: 0,
+                qualityCheck: false
+            },
+            { 
+                id: 'M3', 
+                department: 'small_auto',
+                name: 'אוטומט קטן 1', 
+                status: 'working', 
+                operator: 'דוד', 
+                project: 'בטא',
+                startTime: '09:30',
+                endTime: '17:30',
+                units: 289,
+                qualityCheck: true
+            },
+            { 
+                id: 'M4', 
+                department: 'large_auto',
+                name: 'אוטומט גדול 5', 
+                status: 'error', 
+                operator: 'יוסי', 
+                project: 'גמא',
+                startTime: '07:00',
+                endTime: '15:00',
+                units: 67,
+                qualityCheck: false
+            },
+            { 
+                id: 'M5', 
+                department: 'sub_operations',
+                name: 'מכבש הידראולי', 
+                status: 'working', 
+                operator: 'רונית', 
+                project: 'דלתא',
+                startTime: '08:30',
+                endTime: '16:30',
+                units: 423,
+                qualityCheck: true
+            }
+        ];
+
+        let machines = JSON.parse(localStorage.getItem('factoryMachines')) || defaultMachines;
+        let currentDepartment = localStorage.getItem('currentDepartment') || 'cnc';
+        let currentMachineId = null;
+        let selectedStatus = null;
+        let sheetId = localStorage.getItem('factorySheetId') || '1CWjsPC2Jh7fWrYrWcHPnYcEdSto_Lsx4DAFpcRdT268';
+        let isNewMachine = false;
+        let nextMachineId = machines.length > 0 ? Math.max(...machines.map(m => parseInt(m.id.substring(1)))) + 1 : 1;
+        
+        // Auto-save the sheet ID if not already saved
+        if (sheetId && !localStorage.getItem('factorySheetId')) {
+            localStorage.setItem('factorySheetId', sheetId);
+        }
+
+        // Render department tabs
+        function renderDepartmentTabs() {
+            const tabsDiv = document.getElementById('departmentTabs');
+            tabsDiv.innerHTML = Object.keys(departments).map(dept => {
+                const count = machines.filter(m => m.department === dept).length;
+                return `
+                    <button onclick="switchDepartment('${dept}')" 
+                            class="tab-button ${currentDepartment === dept ? 'active' : 'bg-gray-100 hover:bg-gray-200'} 
+                            py-3 md:py-4 px-3 md:px-4 rounded-lg transition text-sm md:text-base">
+                        <div class="text-lg md:text-2xl mb-1">${departments[dept].icon}</div>
+                        <div class="font-semibold text-xs md:text-sm">${departments[dept].name}</div>
+                        <div class="text-xs opacity-75 mt-1">${count} מכונות</div>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        // Switch department
+        function switchDepartment(dept) {
+            currentDepartment = dept;
+            localStorage.setItem('currentDepartment', dept);
+            renderDepartmentTabs();
+            renderMachines();
+        }
+
+        // Render machines for current department
+        function renderMachines() {
+            const grid = document.getElementById('machinesGrid');
+            const emptyState = document.getElementById('emptyState');
+            const machineCount = document.getElementById('machineCount');
+            
+            const departmentMachines = machines.filter(m => m.department === currentDepartment);
+            
+            if (departmentMachines.length === 0) {
+                grid.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+                machineCount.textContent = '';
+                return;
+            }
+            
+            grid.classList.remove('hidden');
+            emptyState.classList.add('hidden');
+            
+            const workingCount = departmentMachines.filter(m => m.status === 'working').length;
+            const idleCount = departmentMachines.filter(m => m.status === 'idle').length;
+            const errorCount = departmentMachines.filter(m => m.status === 'error').length;
+            
+            machineCount.innerHTML = `
+                <span class="text-green-600 font-semibold">${workingCount} עובדות</span> • 
+                <span class="text-yellow-600 font-semibold">${idleCount} בהמתנה</span> • 
+                <span class="text-red-600 font-semibold">${errorCount} תקלות</span>
+            `;
+            
+            grid.innerHTML = departmentMachines.map(m => `
+                <div class="machine-card status-${m.status} rounded-2xl shadow-lg p-4 md:p-6 text-white">
+                    <button onclick="deleteMachine('${m.id}')" class="delete-btn" title="מחק מכונה">
+                        <span class="text-white text-lg">🗑️</span>
+                    </button>
+                    
+                    <div onclick="openEditModal('${m.id}')" class="cursor-pointer">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h3 class="text-xl md:text-2xl font-bold">${m.name}</h3>
+                                <p class="text-xs md:text-sm opacity-90">${m.id}</p>
+                            </div>
+                            <div class="w-4 h-4 bg-white rounded-full ${m.status === 'error' ? 'pulse' : ''}"></div>
+                        </div>
+                        
+                        <div class="space-y-2 text-xs md:text-sm">
+                            <div class="flex justify-between">
+                                <span class="opacity-90">מפעיל:</span>
+                                <span class="font-semibold">${m.operator}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="opacity-90">פרויקט:</span>
+                                <span class="font-semibold">${m.project}</span>
+                            </div>
+                            ${m.startTime ? `
+                            <div class="flex justify-between">
+                                <span class="opacity-90">שעות:</span>
+                                <span class="font-semibold">${m.startTime} - ${m.endTime}</span>
+                            </div>
+                            ` : ''}
+                            <div class="flex justify-between">
+                                <span class="opacity-90">יחידות:</span>
+                                <span class="font-semibold text-base md:text-lg">${m.units}</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="opacity-90">ביקורת איכות:</span>
+                                <span class="font-semibold">${m.qualityCheck ? '✅ כן' : '❌ לא'}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-4 pt-4 border-t border-white border-opacity-30 text-xs opacity-75">
+                            לחץ לעדכון
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Show add machine modal
+        function showAddMachineModal() {
+            if (!checkAdminAccess('להוסיף מכונה חדשה')) {
+                return;
+            }
+            
+            isNewMachine = true;
+            currentMachineId = `M${nextMachineId}`;
+            
+            document.getElementById('modalTitle').textContent = 'הוספת מכונה חדשה';
+            document.getElementById('machineNameDiv').classList.remove('hidden');
+            document.getElementById('departmentDiv').classList.remove('hidden');
+            
+            document.getElementById('machineNameInput').value = '';
+            document.getElementById('departmentSelect').value = currentDepartment;
+            document.getElementById('operatorInput').value = '';
+            document.getElementById('projectInput').value = '';
+            document.getElementById('startTimeInput').value = '';
+            document.getElementById('endTimeInput').value = '';
+            document.getElementById('unitsInput').value = '0';
+            document.getElementById('qcInput').checked = false;
+            
+            selectStatus('idle');
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+
+        // Open edit modal for existing machine
+        function openEditModal(machineId) {
+            isNewMachine = false;
+            currentMachineId = machineId;
+            const machine = machines.find(m => m.id === machineId);
+            
+            document.getElementById('modalTitle').textContent = `עדכון: ${machine.name}`;
+            document.getElementById('machineNameDiv').classList.add('hidden');
+            document.getElementById('departmentDiv').classList.add('hidden');
+            
+            document.getElementById('operatorInput').value = machine.operator === '-' ? '' : machine.operator;
+            document.getElementById('projectInput').value = machine.project === '-' ? '' : machine.project;
+            document.getElementById('startTimeInput').value = machine.startTime;
+            document.getElementById('endTimeInput').value = machine.endTime;
+            document.getElementById('unitsInput').value = machine.units;
+            document.getElementById('qcInput').checked = machine.qualityCheck;
+            
+            selectStatus(machine.status);
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+
+        // Close modal
+        function closeModal() {
+            document.getElementById('editModal').classList.add('hidden');
+            currentMachineId = null;
+            selectedStatus = null;
+            isNewMachine = false;
+        }
+
+        // Select status
+        function selectStatus(status) {
+            selectedStatus = status;
+            
+            ['working', 'idle', 'error'].forEach(s => {
+                const btn = document.getElementById(`btn-${s}`);
+                btn.className = 'py-2 md:py-3 rounded-lg font-medium transition text-sm md:text-base bg-gray-100 text-gray-700 hover:bg-gray-200';
+            });
+            
+            const btn = document.getElementById(`btn-${status}`);
+            const colors = {
+                working: 'bg-green-500 text-white hover:bg-green-600',
+                idle: 'bg-yellow-500 text-white hover:bg-yellow-600',
+                error: 'bg-red-500 text-white hover:bg-red-600'
+            };
+            btn.className = `py-2 md:py-3 rounded-lg font-medium transition text-sm md:text-base ${colors[status]}`;
+        }
+
+        // Save changes
+        function saveChanges() {
+            if (isNewMachine) {
+                const machineName = document.getElementById('machineNameInput').value.trim();
+                if (!machineName) {
+                    alert('נא להזין שם למכונה');
+                    return;
+                }
+                
+                const newMachine = {
+                    id: currentMachineId,
+                    department: document.getElementById('departmentSelect').value,
+                    name: machineName,
+                    status: selectedStatus,
+                    operator: document.getElementById('operatorInput').value.trim() || '-',
+                    project: document.getElementById('projectInput').value.trim() || '-',
+                    startTime: document.getElementById('startTimeInput').value,
+                    endTime: document.getElementById('endTimeInput').value,
+                    units: parseInt(document.getElementById('unitsInput').value) || 0,
+                    qualityCheck: document.getElementById('qcInput').checked
+                };
+                
+                machines.push(newMachine);
+                nextMachineId++;
+                
+                // Switch to the department of the new machine
+                currentDepartment = newMachine.department;
+                localStorage.setItem('currentDepartment', currentDepartment);
+            } else {
+                const machine = machines.find(m => m.id === currentMachineId);
+                
+                machine.status = selectedStatus;
+                machine.operator = document.getElementById('operatorInput').value.trim() || '-';
+                machine.project = document.getElementById('projectInput').value.trim() || '-';
+                machine.startTime = document.getElementById('startTimeInput').value;
+                machine.endTime = document.getElementById('endTimeInput').value;
+                machine.units = parseInt(document.getElementById('unitsInput').value) || 0;
+                machine.qualityCheck = document.getElementById('qcInput').checked;
+            }
+            
+            localStorage.setItem('factoryMachines', JSON.stringify(machines));
+            
+            if (sheetId) {
+                saveToGoogleSheets(machines.find(m => m.id === currentMachineId));
+            }
+            
+            renderDepartmentTabs();
+            renderMachines();
+            closeModal();
+        }
+
+        // Delete machine
+        function deleteMachine(machineId) {
+            event.stopPropagation(); // Prevent opening edit modal
+            
+            if (!checkAdminAccess('למחוק מכונה')) {
+                return;
+            }
+            
+            const machine = machines.find(m => m.id === machineId);
+            if (confirm(`האם אתה בטוח שברצונך למחוק את המכונה "${machine.name}"?`)) {
+                machines = machines.filter(m => m.id !== machineId);
+                localStorage.setItem('factoryMachines', JSON.stringify(machines));
+                renderDepartmentTabs();
+                renderMachines();
+            }
+        }
+
+        // Connect to Google Sheets
+        function connectSheet() {
+            const input = document.getElementById('sheetIdInput').value.trim();
+            if (input) {
+                sheetId = input;
+                localStorage.setItem('factorySheetId', sheetId);
+                alert('🎉 התחברת בהצלחה! כעת כל עדכון יישמר ל-Google Sheets.\n\nהחיבור נשמר - לא תצטרך להתחבר שוב!');
+                updateConnectionStatus();
+            } else {
+                alert('נא להזין Sheet ID');
+            }
+        }
+
+        // Disconnect from Google Sheets
+        function disconnectSheet() {
+            if (confirm('האם אתה בטוח שברצונך לנתק את החיבור ל-Google Sheets?')) {
+                localStorage.removeItem('factorySheetId');
+                sheetId = null;
+                document.getElementById('sheetIdInput').value = '';
+                updateConnectionStatus();
+                alert('החיבור נותק בהצלחה');
+            }
+        }
+
+        // Update connection status display
+        function updateConnectionStatus() {
+            const statusDiv = document.getElementById('connectionStatus');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+            const inputField = document.getElementById('sheetIdInput');
+            
+            if (sheetId) {
+                statusDiv.innerHTML = '✅ <strong>מחובר לגיליון:</strong> ' + sheetId.substring(0, 20) + '...';
+                statusDiv.className = 'mt-2 text-xs md:text-sm text-green-700 font-semibold';
+                disconnectBtn.style.display = 'block';
+                inputField.value = sheetId;
+                inputField.disabled = true;
+            } else {
+                statusDiv.innerHTML = '⚠️ לא מחובר - הנתונים נשמרים רק בדפדפן';
+                statusDiv.className = 'mt-2 text-xs md:text-sm text-orange-600';
+                disconnectBtn.style.display = 'none';
+                inputField.disabled = false;
+            }
+        }
+
+        // Save to Google Sheets
+        async function saveToGoogleSheets(machine) {
+            const scriptUrl = `https://script.google.com/macros/s/AKfycbxv83jpLPNTSrcSQnxUdC8vwt_Xe9jaM8KFFhs4HaUB5F_m4l3qp9ThpgWRTUnuTjOzlQ/exec`;
+            
+            try {
+                const response = await fetch(scriptUrl, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sheetId: sheetId,
+                        department: departments[machine.department].name,
+                        machine: machine,
+                        timestamp: new Date().toLocaleString('he-IL')
+                    })
+                });
+                console.log('נשמר ל-Google Sheets:', machine.name);
+            } catch (error) {
+                console.log('שגיאה בשמירה:', error);
+            }
+        }
+
+        // Initial render
+        renderDepartmentTabs();
+        renderMachines();
+        updateConnectionStatus();
+    </script>
+</body>
+</html>
